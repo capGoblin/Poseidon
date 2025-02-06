@@ -74,8 +74,9 @@ interface MessageHandler {
 async function initializeAgent() {
   try {
     // Initialize LLM
-    const llm = new ChatGroq({
-      apiKey: "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", // Default value.
+    const llm = new ChatOpenAI({
+      model: "gpt-4o-mini",
+      apiKey: process.env.OPENAI_API_KEY,
     });
 
     let walletDataStr: string | null = null;
@@ -203,7 +204,7 @@ export async function runAutonomousMode(
       }
     }
 
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   } catch (error) {
     if (error instanceof Error) {
       await messageHandler.sendMessage(

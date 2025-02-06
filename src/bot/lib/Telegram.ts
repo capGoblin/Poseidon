@@ -24,7 +24,7 @@ export class TelegramBot {
   async start() {
     try {
       // Initialize webhook on every start
-      await init();  // This is from axios.ts which sets up the webhook
+      await init(); // This is from axios.ts which sets up the webhook
       console.log("Telegram bot started and webhook initialized");
     } catch (error) {
       console.error("Error starting bot:", error);
@@ -38,7 +38,7 @@ export class TelegramBot {
         params: {
           chat_id: chatId,
           text,
-          parse_mode: "Markdown",
+          parse_mode: "HTML",
         },
       });
       console.log("Message sent:", response.data);
