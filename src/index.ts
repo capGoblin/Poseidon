@@ -12,20 +12,31 @@ const port = process.env.PORT || 3000;
 // Setup middleware
 app.use(express.json());
 
+let bot: any;
+
 async function main() {
   try {
-    // Initialize LangChain agent
-    const agent = await setupLangChainAgent();
+    // Initialize LangChain agent and get both agent and config
+    const agentData = await setupLangChainAgent();
 
     // Start Telegram bot with LangChain integration
-    const bot = await startBot(agent);
+    bot = await startBot(agentData);
 
     // Handle webhook endpoint
     app.post(`/webhook/${process.env.TELEGRAM_TOKEN}`, async (req, res) => {
-      console.log("Received webhook:", req.body); // Add logging
-      if (req.body.message) {
+      console.log("Received webhook:", req.body);
+
+      // Handle callback queries (button clicks)
+      if (req.body.callback_query) {
+        await bot.handleCallback(req.body.callback_query);
+        // Answer callback query to remove loading state
+        await bot.answerCallbackQuery(req.body.callback_query.id);
+      }
+      // Handle regular messages
+      else if (req.body.message) {
         await bot.handleMessage(req.body.message);
       }
+
       res.sendStatus(200);
     });
 
