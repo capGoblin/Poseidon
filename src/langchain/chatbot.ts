@@ -16,6 +16,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import * as dotenv from "dotenv";
 import * as fs from "fs";
 import * as readline from "readline";
+import { ChatGroq } from "@langchain/groq";
 
 dotenv.config();
 
@@ -59,6 +60,12 @@ validateEnvironment();
 // Configure a file to persist the agent's CDP MPC Wallet Data
 const WALLET_DATA_FILE = "wallet_data.txt";
 
+// Add this interface for message handling
+interface MessageHandler {
+  sendMessage: (text: string) => Promise<void>;
+  getMessage: () => string;
+}
+
 /**
  * Initialize the agent with CDP Agentkit
  *
@@ -67,13 +74,8 @@ const WALLET_DATA_FILE = "wallet_data.txt";
 async function initializeAgent() {
   try {
     // Initialize LLM
-    const llm = new ChatOpenAI({
-      model: "llama",
-      apiKey:
-        "gaia-YzE4ZTQ4OGMtYWY4OS00ZmFmLWE1NDYtZGIwNzY4ZTA4ZDFj-9Vfe2qdcLnVrtl9W",
-      configuration: {
-        baseURL: "https://llama8b.gaia.domains/v1",
-      },
+    const llm = new ChatGroq({
+      apiKey: "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", // Default value.
     });
 
     let walletDataStr: string | null = null;
@@ -171,88 +173,70 @@ async function initializeAgent() {
  * @param interval - Time interval between actions in seconds
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function runAutonomousMode(agent: any, config: any, interval = 10) {
-  console.log("Starting autonomous mode...");
+export async function runAutonomousMode(
+  agent: any,
+  config: any,
+  messageHandler: MessageHandler
+) {
+  try {
+    const thought =
+      "Be creative and do something interesting on the blockchain. " +
+      "Choose an action or set of actions and execute it that highlights your abilities.";
 
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    try {
-      const thought =
-        "Be creative and do something interesting on the blockchain. " +
-        "Choose an action or set of actions and execute it that highlights your abilities.";
+    const stream = await agent.stream(
+      { messages: [new HumanMessage(thought)] },
+      config
+    );
 
-      const stream = await agent.stream(
-        { messages: [new HumanMessage(thought)] },
-        config
-      );
-
-      for await (const chunk of stream) {
-        if ("agent" in chunk) {
-          console.log(chunk.agent.messages[0].content);
-        } else if ("tools" in chunk) {
-          console.log(chunk.tools.messages[0].content);
+    let responseText = "";
+    for await (const chunk of stream) {
+      if ("agent" in chunk && chunk.agent.messages[0].content) {
+        responseText = chunk.agent.messages[0].content;
+        if (responseText.trim()) {
+          await messageHandler.sendMessage(responseText);
         }
-        console.log("-------------------");
+      } else if ("tools" in chunk && chunk.tools.messages[0].content) {
+        responseText = chunk.tools.messages[0].content;
+        if (responseText.trim()) {
+          await messageHandler.sendMessage(responseText);
+        }
       }
+    }
 
-      // await new Promise((resolve) => setTimeout(resolve, interval * 1000));
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error("Error:", error.message);
-      }
-      process.exit(1);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  } catch (error) {
+    if (error instanceof Error) {
+      await messageHandler.sendMessage(
+        `Error in autonomous mode: ${error.message}`
+      );
+      throw error;
     }
   }
 }
 
-/**
- * Run the agent interactively based on user input
- *
- * @param agent - The agent executor
- * @param config - Agent configuration
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function runChatMode(agent: any, config: any) {
-  console.log("Starting chat mode... Type 'exit' to end.");
-
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  const question = (prompt: string): Promise<string> =>
-    new Promise((resolve) => rl.question(prompt, resolve));
-
+// Modify runChatMode to accept a custom message handler
+export async function runChatMode(
+  agent: any,
+  config: any,
+  messageHandler: MessageHandler
+) {
   try {
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const userInput = await question("\nPrompt: ");
+    const stream = await agent.stream(
+      { messages: [new HumanMessage(messageHandler.getMessage())] },
+      config
+    );
 
-      if (userInput.toLowerCase() === "exit") {
-        break;
-      }
-
-      const stream = await agent.stream(
-        { messages: [new HumanMessage(userInput)] },
-        config
-      );
-
-      for await (const chunk of stream) {
-        if ("agent" in chunk) {
-          console.log(chunk.agent.messages[0].content);
-        } else if ("tools" in chunk) {
-          console.log(chunk.tools.messages[0].content);
-        }
-        console.log("-------------------");
+    for await (const chunk of stream) {
+      if ("agent" in chunk) {
+        await messageHandler.sendMessage(chunk.agent.messages[0].content);
+      } else if ("tools" in chunk) {
+        await messageHandler.sendMessage(chunk.tools.messages[0].content);
       }
     }
   } catch (error) {
     if (error instanceof Error) {
-      console.error("Error:", error.message);
+      throw error;
     }
-    process.exit(1);
-  } finally {
-    rl.close();
   }
 }
 
@@ -293,35 +277,34 @@ async function chooseMode(): Promise<"chat" | "auto"> {
 
 /**
  * Start the chatbot agent
- */
-async function main() {
-  try {
-    const { agent, config } = await initializeAgent();
-    const mode = await chooseMode();
+//  */
+// async function main() {
+//   try {
+//     const { agent, config } = await initializeAgent();
+//     const mode = await chooseMode();
 
-    if (mode === "chat") {
-      await runChatMode(agent, config);
-    } else {
-      await runAutonomousMode(agent, config);
-    }
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error("Error:", error.message);
-    }
-    process.exit(1);
-  }
-}
+//     if (mode === "chat") {
+//       await runChatMode(agent, config);
+//     } else {
+//       await runAutonomousMode(agent, config);
+//     }
+//   } catch (error) {
+//     if (error instanceof Error) {
+//       console.error("Error:", error.message);
+//     }
+//     process.exit(1);
+//   }
+// }
 
-if (require.main === module) {
-  console.log("Starting Agent...");
-  main().catch((error) => {
-    console.error("Fatal error:", error);
-    process.exit(1);
-  });
-}
+// if (require.main === module) {
+//   console.log("Starting Agent...");
+//   main().catch((error) => {
+//     console.error("Fatal error:", error);
+//     process.exit(1);
+//   });
+// }
 
 export async function setupLangChainAgent() {
-  // Initialize your agent here
-  const agent = await initializeAgent();
-  return agent;
+  const { agent, config } = await initializeAgent();
+  return { agent, config }; // Explicitly return both
 }

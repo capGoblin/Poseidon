@@ -1,8 +1,8 @@
 import { TelegramBot } from "./lib/Telegram";
 
-export async function startBot(agent: any) {
+export async function startBot(agentData: { agent: any; config: any }) {
   const bot = new TelegramBot();
-  bot.setAgent(agent);
+  bot.setAgent(agentData.agent, agentData.config);
   await bot.start();
   return bot;
 }

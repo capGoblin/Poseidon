@@ -18,7 +18,16 @@ async function main() {
     const agent = await setupLangChainAgent();
 
     // Start Telegram bot with LangChain integration
-    await startBot(agent);
+    const bot = await startBot(agent);
+
+    // Handle webhook endpoint
+    app.post(`/webhook/${process.env.TELEGRAM_TOKEN}`, async (req, res) => {
+      console.log("Received webhook:", req.body); // Add logging
+      if (req.body.message) {
+        await bot.handleMessage(req.body.message);
+      }
+      res.sendStatus(200);
+    });
 
     // Start Express server
     app.listen(port, () => {
