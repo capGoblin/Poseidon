@@ -78,3 +78,25 @@ export const TradeSchema = z
   })
   .strip()
   .describe("Instructions for trading assets");
+
+/**
+ * Input schema for add liquidity action.
+ */
+export const AddLiquiditySchema = z.object({
+  token: z.string().describe("The token address to add liquidity for"),
+  ethAmount: z.string().describe("The amount of ETH to add as liquidity"),
+  minTokens: z.string().describe("The minimum amount of tokens to receive"),
+  contractAddress: z.string().describe("The router contract address"),
+});
+
+/**
+ * Input schema for approve tokens action.
+ */
+export const ApproveTokensSchema = z.object({
+  poolAddress: z.string()
+    .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid pool address format")
+    .describe("The address of the pool to read token addresses from"),
+  spenderAddress: z.string()
+    .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid spender address format")
+    .describe("The address to approve tokens for"),
+});

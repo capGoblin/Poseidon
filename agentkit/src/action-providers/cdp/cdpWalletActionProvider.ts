@@ -6,8 +6,15 @@ import { ActionProvider } from "../actionProvider";
 import { Network } from "../../network";
 import { CdpWalletProvider, CdpProviderConfig } from "../../wallet-providers";
 
-import { SolidityVersions } from "./constants";
-import { DeployContractSchema, DeployNftSchema, DeployTokenSchema, TradeSchema } from "./schemas";
+import { SolidityVersions, POOL_ABI, ERC20_ABI } from "./constants";
+import {
+  DeployContractSchema,
+  DeployNftSchema,
+  DeployTokenSchema,
+  TradeSchema,
+  AddLiquiditySchema,
+  ApproveTokensSchema,
+} from "./schemas";
 
 /**
  * CdpWalletActionProvider is an action provider for Cdp.
@@ -72,7 +79,9 @@ map where the key is the arg name and the value is the arg value. Encode uint/in
 
       const result = await contract.wait();
 
-      return `Deployed contract ${args.contractName} at address ${result.getContractAddress()}. Transaction link: ${result
+      return `Deployed contract ${
+        args.contractName
+      } at address ${result.getContractAddress()}. Transaction link: ${result
         .getTransaction()!
         .getTransactionLink()}`;
     } catch (error) {
@@ -198,6 +207,140 @@ Important notes:
         .getTransactionLink()}`;
     } catch (error) {
       return `Error trading assets: ${error}`;
+    }
+  }
+
+  /**
+   * Adds liquidity to a pool.
+   *
+   * @param walletProvider - The wallet provider to use
+   * @param args - The arguments for adding liquidity
+   * @returns A message with the transaction details
+   */
+  @CreateAction({
+    name: "add_liquidity",
+    description: `This tool will add liquidity to a pool using ETH and tokens.
+It takes the following inputs:
+- token: The token address to add liquidity for
+- ethAmount: The amount of ETH to add as liquidity (in wei)
+- minTokens: The minimum amount of tokens to receive
+- contractAddress: The router contract address
+
+Note: Make sure you have enough ETH and tokens before adding liquidity.`,
+    schema: AddLiquiditySchema,
+  })
+  async addLiquidity(
+    walletProvider: CdpWalletProvider,
+    args: z.infer<typeof AddLiquiditySchema>,
+  ): Promise<string> {
+    try {
+      const abiCopy = ERC20_ABI.map(item => ({
+        ...item,
+        inputs: [...item.inputs],
+        outputs: [...(item.outputs || [])],
+      }));
+
+      const result = await walletProvider.invokeContract({
+        contractAddress: args.contractAddress,
+        method: "swapETHToToken",
+        args: {
+          _token: args.token,
+          _ethAmount: args.ethAmount,
+          _minTokens: args.minTokens,
+        },
+        abi: abiCopy,
+      });
+
+      return `Successfully added liquidity. Transaction hash: ${result}`;
+    } catch (error) {
+      return `Error adding liquidity: ${error}`;
+    }
+  }
+
+  /**
+   * Approves tokens for a pool.
+   *
+   * @param walletProvider - The wallet provider to use
+   * @param args - The input arguments for the action
+   * @returns A message with the transaction details
+   */
+  @CreateAction({
+    name: "approve_tokens",
+    description: `This tool will read token addresses from a pool and approve them for a spender.
+It takes the following inputs:
+- poolAddress: The address of the pool to read token addresses from
+- spenderAddress: The address to approve tokens for (router address)`,
+    schema: ApproveTokensSchema,
+  })
+  async approveTokens(
+    walletProvider: CdpWalletProvider,
+    args: z.infer<typeof ApproveTokensSchema>,
+  ): Promise<string> {
+    try {
+      console.log("Starting approveTokens with args:", args);
+
+      // Read token addresses
+      console.log("Reading token0...");
+      const token0 = (await walletProvider.readContract({
+        address: args.poolAddress as `0x${string}`,
+        abi: POOL_ABI,
+        functionName: "token0",
+      })) as `0x${string}`;
+      console.log("Token0 address:", token0);
+
+      console.log("Reading token1...");
+      const token1 = (await walletProvider.readContract({
+        address: args.poolAddress as `0x${string}`,
+        abi: POOL_ABI,
+        functionName: "token1",
+      })) as `0x${string}`;
+      console.log("Token1 address:", token1);
+
+      // Approve both tokens
+      const maxApproval = BigInt(
+        "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+      );
+      console.log("Max approval amount:", maxApproval.toString());
+
+      const abiCopy = ERC20_ABI.map(item => ({
+        ...item,
+        inputs: [...item.inputs],
+        outputs: [...(item.outputs || [])],
+      }));
+      console.log("Approving token0...");
+      const approve0 = await walletProvider.invokeContract({
+        contractAddress: token0,
+        method: "approve",
+        args: {
+          spender: args.spenderAddress,
+          amount: maxApproval.toString(),
+        },
+        abi: abiCopy,
+      });
+      console.log("Token0 approval result:", approve0);
+
+      await walletProvider.waitForTransactionReceipt(approve0);
+
+      console.log("Approving token1...");
+      const approve1 = await walletProvider.invokeContract({
+        contractAddress: token1,
+        method: "approve",
+        args: {
+          spender: args.spenderAddress,
+          amount: maxApproval.toString(),
+        },
+        abi: abiCopy,
+      });
+      console.log("Token1 approval result:", approve1);
+
+      await walletProvider.waitForTransactionReceipt(approve1);
+
+      return `Successfully approved tokens:
+Token0 (${token0}): ${approve0}
+Token1 (${token1}): ${approve1}`;
+    } catch (error) {
+      console.error("Detailed error in approveTokens:", error);
+      return `Error approving tokens: ${error}`;
     }
   }
 

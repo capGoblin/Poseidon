@@ -83,6 +83,28 @@ interface ConfigureCdpAgentkitWithWalletOptions extends CdpWalletProviderConfig 
 }
 
 /**
+ * Interface for InvokeContractParams
+ */
+interface InvokeContractParams {
+  contractAddress: string;
+  method: string;
+  args: Record<string, any>;
+  abi: Array<{
+    inputs: Array<{
+      internalType: string;
+      name: string;
+      type: string;
+    }>;
+    name: string;
+    outputs?: any[];
+    payable?: boolean;
+    stateMutability: string;
+    type: string;
+  }>;
+  amount?: string;
+}
+
+/**
  * A wallet provider that uses the Coinbase SDK.
  */
 export class CdpWalletProvider extends EvmWalletProvider {
@@ -501,5 +523,28 @@ export class CdpWalletProvider extends EvmWalletProvider {
     }
 
     return this.#cdpWallet.export();
+  }
+
+  /**
+   * Invokes a contract method.
+   *
+   * @param params - The parameters for the contract invocation
+   * @returns The transaction hash
+   */
+  async invokeContract(params: InvokeContractParams): Promise<`0x${string}`> {
+    if (!this.#cdpWallet) {
+      throw new Error("Wallet not initialized");
+    }
+
+    const { contractAddress, method, args, abi, amount } = params;
+
+    const result = await this.#cdpWallet.invokeContract({
+      contractAddress,
+      method,
+      args,
+      abi,
+    });
+
+    return result.getTransactionHash() as `0x${string}`;
   }
 }

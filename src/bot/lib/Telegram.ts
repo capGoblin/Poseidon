@@ -3,6 +3,7 @@ import { axiosInstance, init } from "./axios";
 import { HumanMessage } from "@langchain/core/messages";
 import { runChatMode, runAutonomousMode } from "../../langchain/chatbot";
 import { Markup } from "telegraf";
+import axios from "axios";
 
 dotenv.config();
 
@@ -19,6 +20,18 @@ interface PoolData {
   tvl: string;
   apr: string;
   address: string;
+}
+
+interface PriceResponse {
+  token_in: string;
+  token_out: string;
+  price: string;
+  tick: number;
+}
+
+interface TokenAddresses {
+  token0: string;
+  token1: string;
 }
 
 export class TelegramBot {
@@ -116,6 +129,117 @@ export class TelegramBot {
         return;
       }
 
+      if (message.text.startsWith("/getPrice")) {
+        // Parse pool symbol from command, e.g., "/getPrice CL1-cbETH/WETH"
+        const poolSymbol = message.text.split(" ")[1];
+        if (!poolSymbol) {
+          return await this.sendMessage(
+            message.chat.id,
+            "Please provide a pool symbol. Example: /getPrice CL1-cbETH/WETH"
+          );
+        }
+
+        // Parse pool symbol
+        const match = poolSymbol.match(/CL(\d+)-([^/]+)\/([^/]+)/);
+        if (!match) {
+          return await this.sendMessage(
+            message.chat.id,
+            "Invalid pool format. Example: CL1-cbETH/WETH"
+          );
+        }
+
+        const [, tickSpacing, token0, token1] = match;
+
+        try {
+          const response = await axios({
+            method: "post",
+            url: "https://api.compasslabs.ai/v0/aerodrome_slipstream/pool_price/get",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            data: {
+              chain: "base:mainnet",
+              token_in: token0,
+              token_out: token1,
+              tick_spacing: parseInt(tickSpacing),
+            },
+          });
+
+          const data = response.data as PriceResponse;
+          const messageResponse = `
+<b>Pool Price Information</b>
+🔄 Pool: ${poolSymbol}
+💰 Price: ${data.price} ${token0}/${token1}
+📊 Tick: ${data.tick}
+`;
+          await this.sendMessage(message.chat.id, messageResponse);
+        } catch (error) {
+          console.error("Error fetching price:", error);
+          await this.sendMessage(
+            message.chat.id,
+            "Error fetching pool price. Please check the pool symbol and try again."
+          );
+        }
+        return;
+      }
+
+      if (message.text.startsWith("/approve")) {
+        const poolAddress = message.text.split(" ")[1];
+        if (!poolAddress) {
+          return await this.sendMessage(
+            message.chat.id,
+            "Please provide a pool address. Example: /approve 0x47cA96Ea59C13F72745928887f84C9F52C3D7348"
+          );
+        }
+
+        try {
+          if (this.agent && this.config) {
+            const messageHandler = {
+              sendMessage: async (text: string) => {
+                await this.sendMessage(message.chat.id, text);
+              },
+              getMessage: () => `Approve tokens for pool ${poolAddress}`,
+            };
+
+            // First, read token addresses from the pool
+            const messageText = `
+<b>Approving Tokens</b>
+🏦 Pool Address: <code>${poolAddress}</code>
+⏳ Reading token addresses...`;
+            await this.sendMessage(message.chat.id, messageText);
+
+            // Use agent to read token addresses and approve
+            const thought = `Read token0 and token1 addresses from pool ${poolAddress} and approve them for spender 0x827922686190790b37229fd06084350E74485b72`;
+
+            const stream = await this.agent.stream(
+              { messages: [new HumanMessage(thought)] },
+              this.config
+            );
+
+            for await (const chunk of stream) {
+              if ("agent" in chunk) {
+                await messageHandler.sendMessage(
+                  chunk.agent.messages[0].content
+                );
+              } else if ("tools" in chunk) {
+                await messageHandler.sendMessage(
+                  chunk.tools.messages[0].content
+                );
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error in approve command:", error);
+          await this.sendMessage(
+            message.chat.id,
+            `Error approving tokens: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`
+          );
+        }
+        return;
+      }
+
       if (this.agent && this.config) {
         const messageHandler = {
           sendMessage: async (text: string) => {
@@ -148,7 +272,7 @@ export class TelegramBot {
   private async handleTokenSelection(chatId: number, token: string) {
     // Mock pool data - in real implementation, fetch this from your API
     const poolData: PoolData = {
-      symbol: `CL1-${token}/WETH`,
+      symbol: `CL1-cbETH/${token}`,
       tradingFee: "0.05%",
       tvl: "~$4,782,598.72",
       apr: "12.92%",

@@ -29,3 +29,39 @@ export const SolidityVersions = {
   "0.8.1": "0.8.1+commit.df193b15",
   "0.8.0": "0.8.0+commit.c7dfd78e",
 } as const;
+
+/**
+ * The ABI for the Pool contract.
+ */
+export const POOL_ABI = [
+  {
+    inputs: [],
+    name: "token0",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function" as const,
+  },
+  {
+    inputs: [],
+    name: "token1",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function" as const,
+  },
+] as const;
+
+/**
+ * The ABI for the ERC20 contract.
+ */
+export const ERC20_ABI = [
+  {
+    inputs: [
+      { internalType: "address", name: "spender", type: "address" },
+      { internalType: "uint256", name: "amount", type: "uint256" },
+    ],
+    name: "approve",
+    outputs: [{ internalType: "bool", name: "", type: "bool" }],
+    stateMutability: "nonpayable",
+    type: "function" as const,
+  },
+] as const;

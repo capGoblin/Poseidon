@@ -16,7 +16,6 @@ import { ChatOpenAI } from "@langchain/openai";
 import * as dotenv from "dotenv";
 import * as fs from "fs";
 import * as readline from "readline";
-import { ChatGroq } from "@langchain/groq";
 
 dotenv.config();
 
@@ -98,8 +97,9 @@ async function initializeAgent() {
         /\\n/g,
         "\n"
       ),
-      cdpWalletData: walletDataStr || undefined,
-      networkId: process.env.NETWORK_ID || "base-sepolia",
+      // cdpWalletData: walletDataStr || undefined,
+      networkId: "base-mainnet",
+      mnemonicPhrase: process.env.MNEMONIC_PHRASE,
     };
 
     const walletProvider = await CdpWalletProvider.configureWithWallet(config);
